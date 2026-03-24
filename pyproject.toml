@@ -11,4 +11,4 @@ dependencies = [
 ]
 
 [project.scripts]
-sf_backtester = "sf_backtester.cli:main"
+sf-backtester = "sf_backtester.cli:cli"

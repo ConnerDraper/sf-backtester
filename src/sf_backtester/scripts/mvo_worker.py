@@ -86,6 +86,52 @@ def run_backtest_by_year(
     print(f"Wrote weights to {output_path}")
 
 
+def run_dynamic_backtest_by_year(
+    df: pl.LazyFrame,
+    initial_gamma: float,
+    target_active_risk: float,
+    year: int,
+    output_dir: str,
+    n_cpus: int,
+    constraints: list[str],
+) -> None:
+    """Run dynamic MVO backtest with gamma calibration for a single year.
+
+    Args:
+        df: LazyFrame containing the data.
+        initial_gamma: Starting value for gamma calibration.
+        target_active_risk: Target annualized active risk for calibration.
+        year: Year to process.
+        output_dir: Directory to write output.
+        n_cpus: Number of CPUs for parallel execution.
+        constraints: List of constraint names.
+    """
+    year_start = dt.date(year, 1, 1)
+    year_end = dt.date(year, 12, 31)
+
+    filtered = (
+        df.filter(pl.col("date").is_between(year_start, year_end))
+        .select(["date", "barrid", "alpha", "predicted_beta"])
+        .collect()
+    )
+
+    print(f"Processing year {year}: {len(filtered)} rows")
+
+    constraint_objects = get_constraints(constraints)
+
+    weights = sfb.dynamic_backtest_parallel(
+        data=filtered,
+        constraints=constraint_objects,
+        initial_gamma=initial_gamma,
+        target_active_risk=target_active_risk,
+        n_cpus=n_cpus,
+    )
+
+    output_path = f"{output_dir}/{year}.parquet"
+    weights.write_parquet(output_path)
+    print(f"Wrote weights to {output_path}")
+
+
 def main() -> None:
     """Main entry point for the worker script."""
     parser = argparse.ArgumentParser(
@@ -100,8 +146,20 @@ def main() -> None:
     parser.add_argument(
         "--gamma",
         type=float,
-        required=True,
-        help="Risk aversion parameter for MVO.",
+        required=False,
+        help="Risk aversion parameter for MVO (static backtest).",
+    )
+    parser.add_argument(
+        "--initial_gamma",
+        type=float,
+        required=False,
+        help="Starting gamma for calibration (dynamic backtest).",
+    )
+    parser.add_argument(
+        "--target_active_risk",
+        type=float,
+        required=False,
+        help="Target active risk for calibration (dynamic backtest).",
     )
     parser.add_argument(
         "--year",
@@ -131,14 +189,28 @@ def main() -> None:
 
     df = pl.scan_parquet(args.data_path)
 
-    run_backtest_by_year(
-        df=df,
-        gamma=args.gamma,
-        year=args.year,
-        output_dir=args.output_dir,
-        n_cpus=args.n_cpus,
-        constraints=args.constraints,
-    )
+    # Route to appropriate function based on which gamma mode is provided
+    if args.initial_gamma is not None and args.target_active_risk is not None:
+        run_dynamic_backtest_by_year(
+            df=df,
+            initial_gamma=args.initial_gamma,
+            target_active_risk=args.target_active_risk,
+            year=args.year,
+            output_dir=args.output_dir,
+            n_cpus=args.n_cpus,
+            constraints=args.constraints,
+        )
+    elif args.gamma is not None:
+        run_backtest_by_year(
+            df=df,
+            gamma=args.gamma,
+            year=args.year,
+            output_dir=args.output_dir,
+            n_cpus=args.n_cpus,
+            constraints=args.constraints,
+        )
+    else:
+        parser.error("Either --gamma (static) or both --initial_gamma and --target_active_risk (dynamic) must be specified.")
 
 
 if __name__ == "__main__":
