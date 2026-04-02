@@ -1,4 +1,4 @@
-"""MVO worker script for SLURM jobs.
+"""MVO dynamic worker script for SLURM jobs.
 
 This script is executed by each SLURM array task to process a single year.
 """
@@ -8,27 +8,30 @@ import datetime as dt
 
 import polars as pl
 import sf_quant.backtester as sfb
-import sf_quant.optimizer as sfo
-
 from sf_backtester.scripts.utils import get_constraints
+
 
 def run_backtest_by_year(
     df: pl.LazyFrame,
-    gamma: float,
+    initial_gamma: float,
     year: int,
     output_dir: str,
     n_cpus: int,
     constraints: list[str],
+    active_weights: bool,
+    target_active_risk: float,
 ) -> None:
     """Run MVO backtest for a single year.
 
     Args:
         df: LazyFrame containing the data.
-        gamma: Risk aversion parameter.
+        initial_gamma: Risk aversion parameter.
         year: Year to process.
         output_dir: Directory to write output.
         n_cpus: Number of CPUs for parallel execution.
         constraints: List of constraint names.
+        active_weights: Active weights flag.
+        target_active_risk: Target active risk.
     """
     year_start = dt.date(year, 1, 1)
     year_end = dt.date(year, 12, 31)
@@ -43,10 +46,12 @@ def run_backtest_by_year(
 
     constraint_objects = get_constraints(constraints)
 
-    weights = sfb.backtest_parallel(
+    weights = sfb.dynamic_backtest_parallel(
         data=filtered,
         constraints=constraint_objects,
-        gamma=gamma,
+        initial_gamma=initial_gamma,
+        target_active_risk=target_active_risk,
+        active_weights=active_weights,
         n_cpus=n_cpus,
     )
 
@@ -67,10 +72,22 @@ def main() -> None:
         help="Path to parquet file containing the data.",
     )
     parser.add_argument(
-        "--gamma",
+        "--initial_gamma",
         type=float,
         required=True,
         help="Risk aversion parameter for MVO.",
+    )
+    parser.add_argument(
+        "--target_active_risk",
+        type=float,
+        required=True,
+        help="Target active risk.",
+    )
+    parser.add_argument(
+        "--active_weights",
+        type=lambda x: x.lower() == "true",
+        required=True,
+        help="Active weights flag (pass 'true' or 'false').",
     )
     parser.add_argument(
         "--year",
@@ -102,11 +119,13 @@ def main() -> None:
 
     run_backtest_by_year(
         df=df,
-        gamma=args.gamma,
+        initial_gamma=args.initial_gamma,
         year=args.year,
         output_dir=args.output_dir,
         n_cpus=args.n_cpus,
         constraints=args.constraints,
+        active_weights=args.active_weights,
+        target_active_risk=args.target_active_risk
     )
 
 
