@@ -1,9 +1,10 @@
-/data.py
-/test.py
+/example
 /config.yml
+/dynamic_config.yml
 /logs
 /weights
 /*.parquet
+/*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
