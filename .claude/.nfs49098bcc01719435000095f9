@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python3 -c \"import click; help\\(click.command\\(\\)\\)\")",
-      "Bash(python3 -m py_compile src/sf_backtester/config.py)",
-      "Bash(grep -n \"BacktestDynamicConfig\" /home/amh1124/Projects/sf-backtester/src/sf_backtester/*.py)"
-    ]
-  }
-}
